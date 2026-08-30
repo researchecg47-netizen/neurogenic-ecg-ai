@@ -270,7 +270,10 @@ def compute_shap(model, X: pd.DataFrame,
     rf_clf = rf_pipe.named_steps['clf']
     X_transformed = rf_pipe.named_steps['imputer'].transform(X)
     X_transformed = rf_pipe.named_steps['scaler'].transform(X_transformed)
-    X_df = pd.DataFrame(X_transformed, columns=X.columns)
+    # Use actual number of columns after transformation to avoid shape mismatch
+    n_cols = X_transformed.shape[1]
+    col_names = list(X.columns)[:n_cols]
+    X_df = pd.DataFrame(X_transformed, columns=col_names)
 
     if len(X_df) > max_samples:
         X_df = X_df.sample(max_samples, random_state=42)
@@ -280,10 +283,16 @@ def compute_shap(model, X: pd.DataFrame,
 
     if isinstance(shap_values, list):
         sv = shap_values[1]
+    elif hasattr(shap_values, 'ndim') and shap_values.ndim == 3:
+        sv = shap_values[:, :, 1]
+    elif hasattr(shap_values, 'ndim') and shap_values.ndim == 2 and shap_values.shape[1] == 2:
+        sv = shap_values[:, 1]
     else:
         sv = shap_values
 
     mean_abs_shap = np.abs(sv).mean(axis=0)
+    if mean_abs_shap.ndim > 1:
+        mean_abs_shap = mean_abs_shap.mean(axis=1)
     feature_importance = pd.Series(mean_abs_shap, index=X_df.columns)
     top_features = feature_importance.nlargest(15)
 
